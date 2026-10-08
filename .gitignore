@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.pyc
+# личные заметки и материалы курса — не публикуем
+RULES.md
+materials/
+lr2/lab2_metod_lomanyh_otchet.pdf
+lr2/Тема №2.pdf
+lr*/_report.html
+*.zip
