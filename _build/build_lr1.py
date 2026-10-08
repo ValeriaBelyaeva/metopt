@@ -1,9 +1,7 @@
 """Сборка отчёта ЛР1: metopt/lr1/report.pdf.
 
-Скриншоты из Excel (необязательно) кладутся в metopt/lr1/screens/:
-  solver_params.png  — окно «Поиск решения» с заполненной моделью;
-  solver_result.png  — лист после «Найти решение».
-Если файлы есть, они вставляются в отчёт; запуск: python3 metopt/_build/build_lr1.py
+Скриншоты решателя лежат в metopt/lr1/screens/ (solver_params, solver_options, solver_result).
+Запуск: python3 metopt/_build/build_lr1.py
 """
 import subprocess
 import sys
@@ -100,25 +98,17 @@ def excel_grid():
     return f'<table class="grid">{h}{b}</table>'
 
 
-def screens_or_table():
-    parts = []
-    p1, p2 = SCREENS / "solver_params.png", SCREENS / "solver_result.png"
-    if p1.exists():
-        parts.append(f'<figure><img src="{p1.as_uri()}" style="max-width:85%"><figcaption>Окно «Поиск решения» с заданной моделью</figcaption></figure>')
-    else:
-        parts.append("""
-<table class="plain">
-<tr><th>Поле окна «Поиск решения»</th><th>Значение</th></tr>
-<tr><td>Оптимизировать целевую функцию</td><td><code>$B$9</code></td></tr>
-<tr><td>До</td><td>Минимум</td></tr>
-<tr><td>Изменяя ячейки переменных</td><td><code>$B$4:$B$7</code></td></tr>
-<tr><td>В соответствии с ограничениями</td><td><code>$B$12 &lt;= $H$12</code><br><code>$B$13 = $H$13</code><br><code>$B$14 &gt;= $H$14</code></td></tr>
-<tr><td>Сделать переменные без ограничений неотрицательными</td><td>✔ (это условие $x_j \\ge 0$)</td></tr>
-<tr><td>Выберите метод решения</td><td>Поиск решения лин. задач симплекс-методом (Simplex LP)</td></tr>
-</table>""")
-    if p2.exists():
-        parts.append(f'<figure><img src="{p2.as_uri()}" style="max-width:85%"><figcaption>Результат после «Найти решение»</figcaption></figure>')
-    return "\n".join(parts)
+def screens():
+    def fig(name, cap, width):
+        path = SCREENS / name
+        return (f'<figure style="margin:4px 0"><img src="{path.as_uri()}" style="width:{width}">'
+                f'<figcaption>{cap}</figcaption></figure>') if path.exists() else ""
+    main = fig("solver_params.png", "Окно «Решатель»: целевая ячейка (имя solver_opt из файла указывает на $B$9), минимум, "
+                                    "изменяемые ячейки и ограничения", "88%")
+    side = (fig("solver_options.png", "Параметры: линейный решатель CoinMP, переменные неотрицательные", "100%"),
+            fig("solver_result.png", "Результат: решение найдено, целевая функция = 7", "100%"))
+    return main + ('<div style="display:flex; gap:14px; align-items:flex-end; page-break-inside:avoid">'
+                   f'<div style="flex:1.4">{side[0]}</div><div style="flex:1">{side[1]}</div></div>')
 
 
 # ------------------------------------------------------------------ сборка
@@ -130,7 +120,8 @@ def build():
 <h1>Лабораторная работа №1. Решение задачи линейного программирования</h1>
 <p><b>Вариант 6.</b> Минимизировать $Z = 2x_1 + x_2 + x_3 + 3x_4$ при условиях:</p>
 $$\\begin{{cases}} x_1 + 2x_2 + x_4 \\le 10,\\\\ x_1 + x_3 + x_4 = 7,\\\\ x_2 + 2x_3 \\ge 5,\\\\ x_1, x_2, x_3, x_4 \\ge 0.\\end{{cases}}$$
-<p>Работа состоит из трёх частей: решение вручную, решение в Excel с помощью надстройки «Поиск решения» (Solver)
+<p>Работа состоит из трёх частей: решение вручную, решение в электронной таблице с помощью решателя (Solver;
+таблица <code>excel_solution.xlsx</code>, решение выполнено в LibreOffice Calc)
 и решение программой на Python. Дополнительно (бонус) решены двойственная и целочисленная задачи.
 Файлы работы: <code>excel_solution.xlsx</code>, <code>python_solution.py</code>;
 репозиторий: <a href="https://github.com/ValeriaBelyaeva/metopt/tree/main/lr1">github.com/ValeriaBelyaeva/metopt/tree/main/lr1</a>.</p>
@@ -209,10 +200,10 @@ $$W(x) = 2\\left(\\tfrac92 + \\tfrac12 x_2 - x_4 - \\tfrac12 x_6\\right) + x_2 +
 Это видно и без таблиц: из второго ограничения $x_3 = 7 - x_1 - x_4$, тогда $Z = 7 + x_1 + x_2 + 2x_4 \\ge 7$,
 и равенство достигается только при $x_1 = x_2 = x_4 = 0$.</p>
 
-<h2 class="pb">2. Решение в Excel («Поиск решения»)</h2>
+<h2 class="pb">2. Решение в Excel-таблице (Solver, LibreOffice Calc)</h2>
 <p>На листе «ЗЛП» файла <code>excel_solution.xlsx</code> заведены изменяемые ячейки переменных $x_1..x_4$ (B4:B7),
-коэффициенты целевой функции (C4:C7), целевая ячейка и левые части ограничений с формулами:</p>
-{excel_grid()}
+коэффициенты целевой функции (C4:C7), целевая ячейка B9 и левые части ограничений B12:B14 с формулами
+(правые части — в H12:H14):</p>
 <table class="plain">
 <tr><th>Ячейка</th><th>Формула</th><th>Смысл</th></tr>
 <tr><td>B9</td><td><code>=SUMPRODUCT($B$4:$B$7;$C$4:$C$7)</code></td><td>$Z = 2x_1 + x_2 + x_3 + 3x_4$</td></tr>
@@ -220,12 +211,15 @@ $$W(x) = 2\\left(\\tfrac92 + \\tfrac12 x_2 - x_4 - \\tfrac12 x_6\\right) + x_2 +
 <tr><td>B13</td><td><code>=C13*$B$4+D13*$B$5+E13*$B$6+F13*$B$7</code></td><td>$x_1 + x_3 + x_4$</td></tr>
 <tr><td>B14</td><td><code>=C14*$B$4+D14*$B$5+E14*$B$6+F14*$B$7</code></td><td>$x_2 + 2x_3$</td></tr>
 </table>
-<p>Далее <b>Данные → Поиск решения</b>. Модель сохранена в самом листе, поэтому при открытии окна поля уже заполнены:</p>
-{screens_or_table()}
-<p>После нажатия «Найти решение» Excel сообщает, что решение найдено и все ограничения выполнены.
+<p>Файл открыт в LibreOffice Calc, решатель вызывается через <b>Сервис → Решатель…</b> (аналог «Поиска решения» в Excel).
+Задаём целевую ячейку B9 с минимизацией, изменяемые ячейки B4:B7 и три ограничения: левые части B12:B14 сравниваются с правыми
+частями H12:H14 со знаками $\\le$, $=$, $\\ge$. В параметрах выбираем линейный решатель (симплекс-метод CoinMP) и отмечаем
+«Принять переменные как неотрицательные» — это условие $x_j \\ge 0$.</p>
+{screens()}
+<p>Решатель сообщает, что процесс решения успешно завершён, результат — 7.
 В ячейках B4:B7 получаем $x^* = (0, 0, 7, 0)$, в B9 — $Z = 7$; левые части ограничений: $0 \\le 10$, $7 = 7$, $14 \\ge 5$.
 Результат совпадает с ручным решением.</p>
-<p>На листах «Двойственная» и «Целочисленная» того же файла аналогично сохранены модели для бонусных задач (раздел 4).</p>
+<p>На листах «Двойственная» и «Целочисленная» того же файла заведены модели для бонусных задач (раздел 4).</p>
 
 <h2 class="pb">3. Решение программой (Python)</h2>
 <p>Программа реализует тот же алгоритм, что и ручное решение, без библиотек с готовым симплекс-методом
