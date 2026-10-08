@@ -89,8 +89,13 @@ def lower_vertex(xl, fl, xr, fr, L):
 
 
 def piyavskii(f, a, b, L, eps, mode="min", max_iter=1_000_000):
-    """Глобальный экстремум липшицевой f на [a, b] методом ломаных.
-    mode = 'min' или 'max' (максимум f = минимум -f).
+    """Глобальный экстремум липшицевой W(x) = f(x) на [a, b] методом ломаных (обозначения лекции).
+
+    u0 = a, u1 = b — стартовые итерации; g_n(x, u_n) = W(u_n) - L|x - u_n| — «галочка»;
+    p_n(x) = max(p_{n-1}(x), g_n(x, u_n)) — ломаная (миноранта).
+    Итерация n: u_n = argmin p_{n-1}(x) — самая низкая нижняя вершина (точка пересечения
+    соседних галочек); остановка, когда W(u_n) - p_{n-1}(u_n) < eps; ответ u* = u_n, W* = W(u_n).
+    mode = 'min' или 'max' (максимум W = минимум -W).
     Возвращает словарь с ответом, историей итераций и данными для графика."""
     if not a < b:
         raise ValueError("Должно быть a < b")
@@ -103,52 +108,47 @@ def piyavskii(f, a, b, L, eps, mode="min", max_iter=1_000_000):
     ga, gb = g(a), g(b)
     if abs(ga - gb) > L * (b - a):
         raise ValueError("Константа L занижена: условие Липшица нарушено на концах отрезка")
-    trial_x, trial_g = [a, b], [ga, gb]            # верхние вершины (точки испытаний)
-    x_best, g_best = (a, ga) if ga <= gb else (b, gb)
+    trial_x, trial_g = [a, b], [ga, gb]            # верхние вершины: u0 = a, u1 = b, u2, ...
 
-    # куча нижних вершин: (высота, абсцисса, индекс левой точки, индекс правой точки)
+    # куча нижних вершин: (высота p, абсцисса, индекс левой верхней вершины, индекс правой)
     pv, xv = lower_vertex(a, ga, b, gb, L)
     heap = [(pv, xv, 0, 1)]
     history = []
     iterations = 0
     while True:
-        pv, xv, il, ir = heap[0]                   # самая низкая вершина = минимум ломаной
-        gap = g_best - pv
-        if gap <= eps or iterations >= max_iter:
-            history.append({"k": iterations + 1, "il": il, "ir": ir, "xv": xv, "pv": pv,
-                            "record": g_best, "gap": gap, "stop": True})
-            break
-        heapq.heappop(heap)
+        pv, xv, il, ir = heapq.heappop(heap)       # u_n — минимум ломаной p_{n-1}, pv = p_{n-1}(u_n)
         iterations += 1
-        gv = g(xv)                                 # новое испытание
+        gv = g(xv)                                 # W(u_n) — новое испытание
         if gv < pv - 1e-9 * max(1.0, abs(pv)):
             raise ValueError(f"Константа L занижена: f({xv:.6g}) лежит ниже ломаной")
+        delta = gv - pv                            # W(u_n) - p_{n-1}(u_n)
+        stop = delta < eps or iterations >= max_iter
         history.append({"k": iterations, "il": il, "ir": ir, "xv": xv, "pv": pv, "gv": gv,
-                        "record": g_best, "gap": gap, "stop": False})
+                        "delta": delta, "stop": stop})
         trial_x.append(xv)
         trial_g.append(gv)
         new = len(trial_x) - 1
-        if gv < g_best:
-            x_best, g_best = xv, gv
-        # вершина заменяется двумя новыми — слева и справа от новой точки
+        # галочка g_n заменяет вершину двумя новыми — слева и справа от u_n
         pl, xvl = lower_vertex(trial_x[il], trial_g[il], xv, gv, L)
         pr, xvr = lower_vertex(xv, gv, trial_x[ir], trial_g[ir], L)
         heapq.heappush(heap, (pl, xvl, il, new))
         heapq.heappush(heap, (pr, xvr, new, ir))
+        if stop:
+            break
     elapsed = time.perf_counter() - t0
 
     return {
         "mode": mode, "a": a, "b": b, "L": L, "eps": eps, "sign": sign,
-        "x": x_best, "f": sign * g_best,             # приближённая точка и значение экстремума
-        "bound": sign * heap[0][0],                  # гарантированная граница (минимум ломаной)
-        "gap": g_best - heap[0][0],                  # достигнутая точность
-        "iterations": iterations,
+        "x": xv, "f": sign * gv,                     # ответ по лекции: u* = u_n, W* = W(u_n)
+        "bound": sign * pv,                          # p_{n-1}(u_n) — минимум ломаной, оценка снизу
+        "delta": delta,                              # W(u_n) - p_{n-1}(u_n)
+        "iterations": iterations,                    # итерации после стартовых (u0 = a, u1 = b)
         "evaluations": len(trial_x),
         "time": elapsed,
-        "converged": g_best - heap[0][0] <= eps,
+        "converged": delta < eps,
         "trial_x": np.array(trial_x),
         "trial_f": sign * np.array(trial_g),
-        "vert_x": np.array([h[1] for h in heap]),    # нижние вершины итоговой ломаной
+        "vert_x": np.array([h[1] for h in heap]),    # нижние вершины итоговой ломаной p_n
         "vert_p": sign * np.array([h[0] for h in heap]),
         "history": history,
     }
@@ -230,8 +230,8 @@ def solve(func_str, a, b, eps, L=None, mode="min", fig_name=None):
     print(f"Константа Липшица:  L = {L:.6g}" + ("  (оценка по сетке с запасом 20%)" if auto else "  (задана)"))
     print(f"Аргумент:           x* ≈ {res['x']:.8f}")
     print(f"Значение функции:   f(x*) ≈ {res['f']:.8f}")
-    print(f"Граница по ломаной: {res['bound']:.8f}   (разность {res['gap']:.3e} <= eps: {res['converged']})")
-    print(f"Число итераций:     {res['iterations']}   (вычислений функции: {res['evaluations']})")
+    print(f"Ломаная в u*:       p(u*) = {res['bound']:.8f}   (W(u*) - p(u*) = {res['delta']:.3e} < eps: {res['converged']})")
+    print(f"Число итераций:     {res['iterations']}   (+ 2 стартовые, вычислений функции: {res['evaluations']})")
     print(f"Затраченное время:  {res['time'] * 1000:.3f} мс")
 
     fig = plot_result(f, res, title=f"Метод ломаных: f(x) = {f.expr},  eps = {eps:g},  L = {L:.4g}")
